@@ -23,8 +23,9 @@ def token_required(func):
     @wraps(func)
     def decorator(*args, **kwargs):
         token = None
-        if 'x-access-tokens' in request.headers:
-            token = request.headers['x-access-tokens']
+        if not 'Authorization' in request.headers:
+            return jsonify({'Error': 'Missing Authorization Bearer Token in Header.'}), 400
+        token = request.headers['Authorization']
         if not token:
             return jsonify({'Error': 'A valid token is missing.'}), 400
         try:
@@ -45,6 +46,20 @@ def register():
     db.session.add(new_user)
     db.session.commit()
     return jsonify({'Message': 'Registered Successfully!'})
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data['email']
+    check_user = User.query.filter_by(email=email).first()
+    if check_user == None:
+        return jsonify({'Error': 'Invalid login. Account does not exist.'}),  401
+    password = data['password']
+    if not check_password_hash(check_user.password, password):
+        return jsonify({'Error': 'Invalid login.'}), 401
+    
+    token = jwt.encode({'public_id': check_user.public_id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'], algorithm='HS256')
+    return jsonify({'Token': token})
 
 if __name__ == '__main__':
     app.run(debug=True, port=8000)
